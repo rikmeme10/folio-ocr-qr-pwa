@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FOLIO OCR → QR (v4)</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0b1220" />
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial,sans-serif;background:#0f172a;color:#e5e7eb}
+    header{padding:14px 16px;border-bottom:1px solid #1f2937;background:#0b1220;position:sticky;top:0}
+    h1{font-size:18px;margin:0} .sub{font-size:12px;color:var(--muted)}
+    main{max-width:980px;margin:0 auto;padding:16px;display:grid;gap:14px}
+    .card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:12px}
+    .controls{display:flex;flex-wrap:wrap;gap:8px}
+    button,.btn{appearance:none;border:1px solid #334155;background:#0b1220;color:#e5e7eb;padding:9px 12px;border-radius:12px;cursor:pointer}
+    button:hover{border-color:#475569}
+    .stack{display:grid;gap:10px}
+    video{width:100%;max-height:48vh;border-radius:16px;background:#000}
+    .status{font-size:13px;color:var(--muted)}
+    #qrcode{display:grid;place-items:center;background:#0b1220;border:1px dashed #334155;border-radius:16px;min-height:260px}
+    pre{white-space:pre-wrap;background:#0b1220;border:1px dashed #334155;border-radius:14px;padding:10px;max-height:200px;overflow:auto}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OCR → QR para folios</h1>
+    <div class="sub">v4: arranque forzado de cámara y logs.</div>
+  </header>
+
+  <main>
+    <section class="card stack">
+      <div class="controls">
+        <button id="startCam">🎥 Iniciar cámara</button>
+        <button id="scanOnce">🔍 Escanear 1 vez</button>
+        <button id="toggleAuto">⚡ Auto (apagado)</button>
+        <button id="switchCam">🔄 Cambiar cámara</button>
+        <label class="btn" for="fileInput">📷 Subir foto</label>
+        <input id="fileInput" type="file" accept="image/*" capture="environment" hidden>
+      </div>
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="frame" hidden></canvas>
+      <div class="status" id="status">Cargando OCR…</div>
+      <input id="folio" type="text" placeholder="Ej. FQ656CVFB4LD4Y88" />
+      <div class="controls">
+        <button id="makeQR">✅ Generar QR</button>
+        <button id="copyFolio">📋 Copiar folio</button>
+        <button id="clear">♻️ Limpiar</button>
+      </div>
+    </section>
+
+    <section class="card stack">
+      <div class="status">Código QR</div>
+      <div id="qrcode"></div>
+      <div class="status">Diagnóstico: Permiso <span id="perm">—</span> | Cámara <span id="camName">—</span> | Resolución <span id="res">—</span></div>
+      <pre id="log"></pre>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+    const video = document.getElementById('video'), frame = document.getElementById('frame'),
+          statusEl = document.getElementById('status'), folioInput = document.getElementById('folio'),
+          qrcodeEl = document.getElementById('qrcode'), logEl = document.getElementById('log'),
+          permEl = document.getElementById('perm'), camNameEl = document.getElementById('camName'), resEl = document.getElementById('res');
+    let worker=null, stream=null, autoTimer=null, deviceList=[], current=-1;
+    const log = m => (logEl.textContent = new Date().toLocaleTimeString()+" • "+m+"\n"+logEl.textContent);
+    const setStatus = m => { statusEl.textContent = m; log(m); };
+
+    async function ocrInit(){
+      if (worker) return;
+      setStatus('Cargando OCR…');
+      worker = await Tesseract.createWorker({ logger: m => { if(m.status && m.progress!=null) setStatus(m.status+' '+(m.progress*100|0)+'%'); }});
+      await worker.loadLanguage('eng'); await worker.initialize('eng');
+      await worker.setParameters({ tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
+      setStatus('OCR listo.');
+    }
+    async function getPerm(){ try{ const s=await navigator.permissions.query({name:'camera'}); permEl.textContent=s.state; }catch{ permEl.textContent='desconocido'; } }
+    async function listCams(){ const d=await navigator.mediaDevices.enumerateDevices(); deviceList=d.filter(x=>x.kind==='videoinput'); if(current===-1&&deviceList.length){ const i=deviceList.findIndex(x=>/back|environment/i.test(x.label)); current=i>=0?i:deviceList.length-1; } }
+
+    async function startCamera(){
+      await getPerm(); await listCams(); await ocrInit();
+      if(stream){ try{ stream.getTracks().forEach(t=>t.stop()); }catch{} stream=null; }
+      let ok=false;
+      async function tryGUM(c){ log('getUserMedia '+JSON.stringify(c)); try{ stream=await navigator.mediaDevices.getUserMedia(c); ok=true; }catch(e){ log('falló '+e.name+' '+e.message); } }
+      if(deviceList.length){ const id=deviceList[current]?.deviceId; await tryGUM({video:{deviceId:{exact:id}}}); }
+      if(!ok) await tryGUM({video:{facingMode:'environment'}});
+      if(!ok) await tryGUM({video:true});
+      if(!ok){ setStatus('No se pudo iniciar la cámara. Revisa permisos.'); return; }
+      video.srcObject = stream; try{ await video.play(); }catch(e){ log('video.play '+e.message); }
+      camNameEl.textContent = (stream.getVideoTracks()[0]?.label)||'(sin etiqueta)';
+      let tries=0; const t=setInterval(()=>{ if(video.videoWidth>0){ clearInterval(t); resEl.textContent=video.videoWidth+'×'+video.videoHeight; } else if(++tries>20){ clearInterval(t); resEl.textContent='—'; } }, 100);
+      setStatus('Cámara encendida.');
+    }
+    async function switchCam(){ await listCams(); if(!deviceList.length) return setStatus('Sin cámaras.'); current=(current+1)%deviceList.length; startCamera(); }
+
+    async function grab(){ if(!stream) await startCamera(); if(!worker) await ocrInit(); if(video.readyState<2){ setStatus('La cámara no está lista.'); return; }
+      frame.width=video.videoWidth; frame.height=video.videoHeight; const ctx=frame.getContext('2d'); ctx.drawImage(video,0,0,frame.width,frame.height);
+      const { data } = await worker.recognize(frame); const up=(data.text||'').toUpperCase().replace(/[^A-Z0-9\s]/g,' ');
+      const m=up.match(/\b[A-Z0-9]{12,20}\b/g)||[]; const uniq=[...new Set(m)]; uniq.sort((a,b)=>Math.abs(16-a.length)-Math.abs(16-b.length));
+      if(uniq[0]){ folioInput.value=uniq[0]; renderQR(uniq[0]); setStatus('Folio detectado.'); } else setStatus('No se detectó un folio claro.');
+    }
+    function renderQR(t){ qrcodeEl.innerHTML=''; new QRCode(qrcodeEl,{text:t,width:300,height:300,correctLevel:QRCode.CorrectLevel.M}); }
+
+    document.getElementById('startCam').addEventListener('click', startCamera);
+    document.getElementById('switchCam').addEventListener('click', switchCam);
+    document.getElementById('scanOnce').addEventListener('click', grab);
+    document.getElementById('toggleAuto').addEventListener('click', e=>{ if(autoTimer){clearInterval(autoTimer);autoTimer=null;e.target.textContent='⚡ Auto (apagado)';} else {autoTimer=setInterval(grab,1600);e.target.textContent='⚡ Auto (encendido)'; setStatus('Autoescaneo activo…'); if(!stream) startCamera();}});
+    document.getElementById('makeQR').addEventListener('click', ()=>{ const t=(folioInput.value||'').trim().toUpperCase(); if(!t) return setStatus('Escribe o detecta un folio.'); renderQR(t); });
+    document.getElementById('copyFolio').addEventListener('click', async()=>{ try{ await navigator.clipboard.writeText((folioInput.value||'').trim()); setStatus('Folio copiado.'); }catch{} });
+    document.getElementById('clear').addEventListener('click', ()=>{ folioInput.value=''; qrcodeEl.innerHTML=''; setStatus('Listo.'); });
+
+    // fallback: cualquier toque intenta encender cámara
+    window.addEventListener('click', ()=>{ if(!stream) startCamera(); }, { once:true });
+  </script>
+</body>
+</html>
