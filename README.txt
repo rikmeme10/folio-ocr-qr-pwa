@@ -1,0 +1,1 @@
+Sube estos archivos a un hosting HTTPS. Abre la URL en tu teléfono y toca Instalar. Funciona offline tras el primer uso.

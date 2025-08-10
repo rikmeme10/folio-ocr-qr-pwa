@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FOLIO OCR → QR</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0b1220" />
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--ok:#22c55e;--warn:#f59e0b;--err:#ef4444}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial,sans-serif;background:var(--bg);color:#e5e7eb}
+    header{padding:16px 18px;border-bottom:1px solid #1f2937;background:#0b1220;position:sticky;top:0}
+    h1{font-size:18px;margin:0} .sub{font-size:12px;color:var(--muted)}
+    main{max-width:960px;margin:0 auto;padding:18px;display:grid;gap:16px}
+    .row{display:grid;gap:12px}
+    .card{background:var(--card);border:1px solid #1f2937;border-radius:16px;padding:14px}
+    .controls{display:flex;flex-wrap:wrap;gap:8px}
+    button, .btn{appearance:none;border:1px solid #334155;background:#0b1220;color:#e5e7eb;padding:10px 14px;border-radius:12px;cursor:pointer}
+    button:hover{border-color:#475569} button.primary{background:#1e293b;border-color:#334155}
+    button.good{background:#0c3b23;border-color:#14532d} button.warn{background:#3a2a0a;border-color:#a16207}
+    input[type=text]{width:100%;padding:12px 14px;border:1px solid #334155;border-radius:12px;background:#0b1220;color:#e5e7eb;font-size:16px}
+    .stack{display:grid;gap:10px}
+    video{width:100%;max-height:48vh;border-radius:16px;background:#000}
+    .status{font-size:13px;color:var(--muted)}
+    .pill{display:inline-flex;gap:6px;align-items:center;padding:6px 10px;border:1px solid #334155;border-radius:999px;font-size:12px;cursor:pointer}
+    .pill:hover{border-color:#64748b}
+    #qrcode{display:grid;place-items:center;background:#0b1220;border:1px dashed #334155;border-radius:16px;min-height:280px}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    @media (min-width:900px){.grid{grid-template-columns:1.1fr .9fr}}
+    .muted{color:var(--muted)}
+    .small{font-size:12px}
+    .install{position:fixed;right:14px;bottom:14px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OCR → QR para folios</h1>
+    <div class="sub">Apunta la cámara al cupón. Detecta el folio y genera el QR al instante. Funciona offline después del primer uso.</div>
+  </header>
+
+  <main>
+    <section class="grid">
+      <div class="card stack">
+        <div class="controls">
+          <button id="startCam" class="primary">🎥 Iniciar cámara</button>
+          <button id="scanOnce">🔍 Escanear 1 vez</button>
+          <button id="toggleAuto" class="warn">⚡ Auto (apagado)</button>
+          <label class="btn" for="fileInput">📷 Subir foto</label>
+          <input id="fileInput" type="file" accept="image/*" capture="environment" hidden>
+        </div>
+        <video id="video" playsinline muted></video>
+        <canvas id="frame" hidden></canvas>
+        <div class="status" id="status">OCR no inicializado.</div>
+        <div class="row">
+          <label class="small muted">Folio detectado (puedes corregirlo antes de generar el QR)</label>
+          <input id="folio" type="text" placeholder="Ej. FQ656CVFB4LD4Y88" />
+          <div class="controls">
+            <button id="makeQR" class="good">✅ Generar QR</button>
+            <button id="copyFolio">📋 Copiar folio</button>
+            <button id="clear">♻️ Limpiar</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="small muted">Sugerencias detectadas:</div>
+          <div id="candidates" class="controls"></div>
+        </div>
+      </div>
+
+      <div class="card stack">
+        <div class="small muted">Código QR</div>
+        <div id="qrcode"></div>
+        <div class="status small muted">Tip: brillo alto y el cupón bien recto. Evita sombras y desenfoque.</div>
+      </div>
+    </section>
+  </main>
+
+  <button id="installBtn" class="install btn">⬇️ Instalar</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+    }
+    let deferredPrompt;
+    const installBtn = document.getElementById('installBtn');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault(); deferredPrompt = e; installBtn.style.display = 'block';
+    });
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt(); await deferredPrompt.userChoice;
+      deferredPrompt = null; installBtn.style.display = 'none';
+    });
+
+    const video = document.getElementById('video');
+    const frame = document.getElementById('frame');
+    const statusEl = document.getElementById('status');
+    const folioInput = document.getElementById('folio');
+    const candidatesEl = document.getElementById('candidates');
+    const qrcodeEl = document.getElementById('qrcode');
+
+    let worker = null; let stream = null; let autoTimer = null;
+
+    function setStatus(msg){ statusEl.textContent = msg; }
+
+    async function initOCR(){
+      if (worker) return;
+      setStatus('Cargando OCR…');
+      worker = await Tesseract.createWorker({ logger: m => {
+        if(m.status && m.progress!=null){ setStatus(`${m.status} ${(m.progress*100).toFixed(0)}%`); }
+      }});
+      await worker.loadLanguage('eng'); await worker.initialize('eng');
+      await worker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
+      setStatus('OCR listo.');
+    }
+
+    async function startCamera(){
+      try{
+        await initOCR();
+        if(stream) return;
+        stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: {ideal: 'environment'}, width: {ideal:1280}, height:{ideal:720}}});
+        video.srcObject = stream; await video.play();
+        setStatus('Cámara encendida.');
+      }catch(err){ console.error(err); setStatus('No se pudo acceder a la cámara. Usa “Subir foto”.'); }
+    }
+
+    async function grabFrame(){
+      if(!worker) await initOCR();
+      if(video.readyState < 2){ setStatus('La cámara no está lista.'); return; }
+      const w = video.videoWidth, h = video.videoHeight;
+      frame.width = w; frame.height = h;
+      const ctx = frame.getContext('2d'); ctx.drawImage(video, 0, 0, w, h);
+      const { data } = await worker.recognize(frame);
+      const out = pickBestCode(data.text || '');
+      renderCandidates(out.all);
+      if(out.best){ folioInput.value = out.best; renderQR(out.best); beep(); setStatus('Folio detectado.'); }
+      else setStatus('No se detectó un folio claro. Intenta de nuevo.');
+    }
+
+    function pickBestCode(text){
+      const up = text.toUpperCase().replace(/[^A-Z0-9\s]/g, ' ');
+      const matches = up.match(/\b[A-Z0-9]{12,20}\b/g) || [];
+      const uniq = [...new Set(matches)];
+      uniq.sort((a,b)=>Math.abs(16-a.length)-Math.abs(16-b.length));
+      return { best: uniq[0] || null, all: uniq.slice(0,6) };
+    }
+
+    function renderCandidates(list){
+      candidatesEl.innerHTML = '';
+      list.forEach(code=>{
+        const btn = document.createElement('div');
+        btn.className = 'pill'; btn.textContent = code;
+        btn.addEventListener('click',()=>{ folioInput.value = code; renderQR(code); });
+        candidatesEl.appendChild(btn);
+      });
+    }
+
+    function renderQR(text){
+      if(!text) return;
+      qrcodeEl.innerHTML=''; new QRCode(qrcodeEl, { text, width: 300, height: 300, correctLevel: QRCode.CorrectLevel.M });
+    }
+
+    function beep(){ try{ const ctx = new (window.AudioContext||window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18); setTimeout(()=>{o.stop(); ctx.close();}, 200);}catch(e){} }
+
+    document.getElementById('startCam').addEventListener('click', startCamera);
+    document.getElementById('scanOnce').addEventListener('click', grabFrame);
+    document.getElementById('toggleAuto').addEventListener('click', (e)=>{
+      if(autoTimer){ clearInterval(autoTimer); autoTimer = null; e.target.textContent = '⚡ Auto (apagado)'; e.target.classList.add('warn'); }
+      else{ autoTimer = setInterval(grabFrame, 1600); e.target.textContent = '⚡ Auto (encendido)'; e.target.classList.remove('warn'); setStatus('Autoescaneo activo…'); }
+    });
+
+    document.getElementById('makeQR').addEventListener('click', ()=>{
+      const text = (folioInput.value||'').trim().toUpperCase();
+      if(!text){ setStatus('Escribe o detecta un folio primero.'); return; }
+      renderQR(text); setStatus('QR generado.');
+    });
+
+    document.getElementById('copyFolio').addEventListener('click', async ()=>{
+      const text = (folioInput.value||'').trim(); if(!text) return;
+      try{ await navigator.clipboard.writeText(text); setStatus('Folio copiado al portapapeles.'); } catch(e){ setStatus('No se pudo copiar.'); }
+    });
+
+    document.getElementById('clear').addEventListener('click', ()=>{
+      folioInput.value=''; candidatesEl.innerHTML=''; qrcodeEl.innerHTML=''; setStatus('Listo para el siguiente folio.');
+    });
+
+    window.addEventListener('beforeunload', ()=>{ try{ if(stream){ stream.getTracks().forEach(t=>t.stop()); } if(worker){ worker.terminate(); } }catch(e){} });
+  </script>
+</body>
+</html>
