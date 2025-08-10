@@ -3,40 +3,42 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FOLIO OCR → QR</title>
+  <title>FOLIO OCR → QR (v3)</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#0b1220" />
   <style>
     :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--ok:#22c55e;--warn:#f59e0b;--err:#ef4444}
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial,sans-serif;background:var(--bg);color:#e5e7eb}
-    header{padding:16px 18px;border-bottom:1px solid #1f2937;background:#0b1220;position:sticky;top:0}
+    header{padding:14px 16px;border-bottom:1px solid #1f2937;background:#0b1220;position:sticky;top:0}
     h1{font-size:18px;margin:0} .sub{font-size:12px;color:var(--muted)}
-    main{max-width:960px;margin:0 auto;padding:18px;display:grid;gap:16px}
-    .row{display:grid;gap:12px}
-    .card{background:var(--card);border:1px solid #1f2937;border-radius:16px;padding:14px}
+    main{max-width:980px;margin:0 auto;padding:16px;display:grid;gap:14px}
+    .row{display:grid;gap:10px}
+    .card{background:var(--card);border:1px solid #1f2937;border-radius:16px;padding:12px}
     .controls{display:flex;flex-wrap:wrap;gap:8px}
-    button, .btn{appearance:none;border:1px solid #334155;background:#0b1220;color:#e5e7eb;padding:10px 14px;border-radius:12px;cursor:pointer}
+    button,.btn{appearance:none;border:1px solid #334155;background:#0b1220;color:#e5e7eb;padding:9px 12px;border-radius:12px;cursor:pointer}
     button:hover{border-color:#475569} button.primary{background:#1e293b;border-color:#334155}
     button.good{background:#0c3b23;border-color:#14532d} button.warn{background:#3a2a0a;border-color:#a16207}
-    input[type=text], select{width:100%;padding:12px 14px;border:1px solid #334155;border-radius:12px;background:#0b1220;color:#e5e7eb;font-size:16px}
+    input[type=text], select{width:100%;padding:10px 12px;border:1px solid #334155;border-radius:12px;background:#0b1220;color:#e5e7eb;font-size:16px}
     .stack{display:grid;gap:10px}
     video{width:100%;max-height:48vh;border-radius:16px;background:#000}
     .status{font-size:13px;color:var(--muted)}
     .pill{display:inline-flex;gap:6px;align-items:center;padding:6px 10px;border:1px solid #334155;border-radius:999px;font-size:12px;cursor:pointer}
     .pill:hover{border-color:#64748b}
-    #qrcode{display:grid;place-items:center;background:#0b1220;border:1px dashed #334155;border-radius:16px;min-height:280px}
+    #qrcode{display:grid;place-items:center;background:#0b1220;border:1px dashed #334155;border-radius:16px;min-height:260px}
     .grid{display:grid;grid-template-columns:1fr;gap:12px}
-    @media (min-width:900px){.grid{grid-template-columns:1.1fr .9fr}}
+    @media (min-width:980px){.grid{grid-template-columns:1.2fr .8fr}}
     .muted{color:var(--muted)}
     .small{font-size:12px}
     .install{position:fixed;right:14px;bottom:14px}
+    pre{white-space:pre-wrap;background:#0b1220;border:1px dashed #334155;border-radius:14px;padding:10px;max-height:200px;overflow:auto}
+    .kv{display:grid;grid-template-columns:160px 1fr; gap:6px; font-size:12px; color:#cbd5e1}
   </style>
 </head>
 <body>
   <header>
     <h1>OCR → QR para folios</h1>
-    <div class="sub">Si no aparece la cámara, toca “Permitir” cuando el navegador lo pida o ve al candado → Permisos → Cámara: Permitir.</div>
+    <div class="sub">v3 con diagnóstico. Si se ve negro, usa “Estado cámara” y “Pedir permiso”.</div>
   </header>
 
   <main>
@@ -71,6 +73,21 @@
       <div class="card stack">
         <div class="small muted">Código QR</div>
         <div id="qrcode"></div>
+
+        <div class="small muted">Diagnóstico de cámara</div>
+        <div class="controls">
+          <button id="checkPerms">🛠️ Estado cámara</button>
+          <button id="askPerms">🔔 Pedir permiso</button>
+          <button id="stopCam">⏹️ Apagar cámara</button>
+        </div>
+        <div class="kv">
+          <div>Permiso (browser):</div><div id="permState">—</div>
+          <div>Dispositivos:</div><div id="devices">—</div>
+          <div>Usando cámara:</div><div id="usingCam">—</div>
+          <div>Resolución:</div><div id="resolution">—</div>
+          <div>Último error:</div><div id="lastErr">—</div>
+        </div>
+        <pre id="log"></pre>
       </div>
     </section>
   </main>
@@ -95,6 +112,12 @@
     const folioInput = document.getElementById('folio');
     const candidatesEl = document.getElementById('candidates');
     const qrcodeEl = document.getElementById('qrcode');
+    const permState = document.getElementById('permState');
+    const devicesDiv = document.getElementById('devices');
+    const usingCam = document.getElementById('usingCam');
+    const resolution = document.getElementById('resolution');
+    const lastErr = document.getElementById('lastErr');
+    const logEl = document.getElementById('log');
 
     let worker = null;
     let stream = null;
@@ -102,7 +125,9 @@
     let deviceList = [];
     let currentDeviceIndex = -1;
 
-    function setStatus(msg){ statusEl.textContent = msg; }
+    function log(msg){ logEl.textContent = `${new Date().toLocaleTimeString()} • ${msg}
+` + logEl.textContent; }
+    function setStatus(msg){ statusEl.textContent = msg; log(msg); }
 
     async function initOCR(){
       if (worker) return;
@@ -116,12 +141,36 @@
       setStatus('OCR listo. Pulsa “Iniciar cámara”.');
     }
 
+    async function checkPermissions(){
+      try{
+        const s = await navigator.permissions.query({ name: 'camera' });
+        permState.textContent = s.state; log('Permiso cámara: ' + s.state);
+      }catch(e){
+        permState.textContent = 'no soportado'; log('Permissions API no soportada');
+      }
+      await listCameras();
+    }
+
     async function listCameras(){
       try{
         const devices = await navigator.mediaDevices.enumerateDevices();
         deviceList = devices.filter(d => d.kind === 'videoinput');
-        if (deviceList.length === 0) setStatus('No se encontraron cámaras. Revisa permisos.');
-      }catch(e){ /* ignore */ }
+        devicesDiv.textContent = deviceList.map((d,i)=>`[${i}] ${d.label || '(sin nombre)'}`).join(' | ') || 'ninguna';
+      }catch(e){
+        devicesDiv.textContent = 'error enumerando'; log('enumerateDevices error: ' + e.message);
+      }
+    }
+
+    async function askPermissions(){
+      try{
+        const tmp = await navigator.mediaDevices.getUserMedia({ video: true });
+        tmp.getTracks().forEach(t=>t.stop());
+        log('Permiso concedido via prompt.');
+      }catch(e){
+        lastErr.textContent = e.name + ': ' + e.message;
+        log('Error al pedir permiso: ' + e.name + ' - ' + e.message);
+      }
+      await checkPermissions();
     }
 
     async function startCamera(deviceId){
@@ -134,25 +183,30 @@
         } else {
           constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } };
         }
+        log('Solicitando getUserMedia ' + JSON.stringify(constraints));
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch(err1){
-        try{ // fallback 1: sin resolución
+        log('Error gUM primario: ' + err1.name + ' - ' + err1.message);
+        try{
           stream = await navigator.mediaDevices.getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' } });
         }catch(err2){
-          try{ // fallback 2: cualquier cámara
+          log('Error gUM fallback1: ' + err2.name + ' - ' + err2.message);
+          try{
             stream = await navigator.mediaDevices.getUserMedia({ video: true });
           }catch(err3){
-            console.error(err3);
-            setStatus('No se pudo acceder a la cámara. Toca el candado/ícono de sitio → Permisos → Cámara: Permitir. Luego recarga.');
+            log('Error gUM fallback2: ' + err3.name + ' - ' + err3.message);
+            lastErr.textContent = err3.name + ': ' + err3.message;
+            setStatus('No se pudo acceder a la cámara. Revisa permisos del sitio/app y vuelve a intentar.');
             return;
           }
         }
       }
       video.srcObject = stream; await video.play();
+      usingCam.textContent = (stream.getVideoTracks()[0]?.label) || '(sin etiqueta)';
+      resolution.textContent = video.videoWidth + '×' + video.videoHeight;
       setStatus('Cámara encendida.');
       await listCameras();
       if (currentDeviceIndex === -1 && deviceList.length) {
-        // Seleccionar la trasera si existe
         const back = deviceList.findIndex(d => /back|environment/i.test(d.label));
         currentDeviceIndex = back >= 0 ? back : 0;
       }
@@ -165,6 +219,10 @@
       const id = deviceList[currentDeviceIndex].deviceId;
       await startCamera(id);
       setStatus('Cambiando cámara…');
+    }
+
+    function stopCamera(){
+      if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; usingCam.textContent='—'; resolution.textContent='—'; setStatus('Cámara apagada.'); }
     }
 
     async function grabFrame(){
@@ -210,6 +268,7 @@
 
     document.getElementById('startCam').addEventListener('click', ()=>startCamera());
     document.getElementById('switchCam').addEventListener('click', switchCamera);
+    document.getElementById('stopCam').addEventListener('click', stopCamera);
     document.getElementById('scanOnce').addEventListener('click', grabFrame);
     document.getElementById('toggleAuto').addEventListener('click', (e)=>{
       if(autoTimer){ clearInterval(autoTimer); autoTimer = null; e.target.textContent = '⚡ Auto (apagado)'; e.target.classList.add('warn'); }
@@ -227,6 +286,25 @@
     });
     document.getElementById('clear').addEventListener('click', ()=>{
       folioInput.value=''; candidatesEl.innerHTML=''; qrcodeEl.innerHTML=''; setStatus('Listo para el siguiente folio.');
+    });
+
+    document.getElementById('checkPerms').addEventListener('click', checkPermissions);
+    document.getElementById('askPerms').addEventListener('click', askPermissions);
+
+    document.getElementById('fileInput').addEventListener('change', async (ev)=>{
+      const file = ev.target.files[0]; if(!file) return;
+      await initOCR();
+      const img = new Image();
+      img.onload = async ()=>{
+        frame.width = img.naturalWidth; frame.height = img.naturalHeight;
+        const ctx = frame.getContext('2d'); ctx.drawImage(img, 0, 0);
+        const { data } = await worker.recognize(frame);
+        const out = pickBestCode(data.text || '');
+        renderCandidates(out.all);
+        if(out.best){ folioInput.value = out.best; renderQR(out.best); beep(); setStatus('Folio detectado desde imagen.'); }
+        else setStatus('No se detectó un folio claro en la foto.');
+      };
+      img.src = URL.createObjectURL(file);
     });
 
     window.addEventListener('beforeunload', ()=>{ try{ if(stream){ stream.getTracks().forEach(t=>t.stop()); } if(worker){ worker.terminate(); } }catch(e){} });
