@@ -1,136 +1,77 @@
-<!DOCTYPE html>
-<html lang="es">
+<!DOCTYPE html><html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FOLIO OCR → QR (v3)</title>
-  <link rel="manifest" href="manifest.webmanifest" />
-  <meta name="theme-color" content="#0b1220" />
+  <title>FOLIO OCR → QR (Plan B: Foto)</title>
   <style>
-    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--ok:#22c55e;--warn:#f59e0b;--err:#ef4444}
+    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8}
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial,sans-serif;background:var(--bg);color:#e5e7eb}
-    header{padding:14px 16px;border-bottom:1px solid #1f2937;background:#0b1220;position:sticky;top:0}
+    header{padding:16px;border-bottom:1px solid #1f2937;background:#0b1220}
     h1{font-size:18px;margin:0} .sub{font-size:12px;color:var(--muted)}
-    main{max-width:980px;margin:0 auto;padding:16px;display:grid;gap:14px}
-    .row{display:grid;gap:10px}
-    .card{background:var(--card);border:1px solid #1f2937;border-radius:16px;padding:12px}
-    .controls{display:flex;flex-wrap:wrap;gap:8px}
-    button,.btn{appearance:none;border:1px solid #334155;background:#0b1220;color:#e5e7eb;padding:9px 12px;border-radius:12px;cursor:pointer}
-    button:hover{border-color:#475569} button.primary{background:#1e293b;border-color:#334155}
-    button.good{background:#0c3b23;border-color:#14532d} button.warn{background:#3a2a0a;border-color:#a16207}
-    input[type=text], select{width:100%;padding:10px 12px;border:1px solid #334155;border-radius:12px;background:#0b1220;color:#e5e7eb;font-size:16px}
+    main{max-width:960px;margin:0 auto;padding:16px;display:grid;gap:14px}
+    .card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:14px}
     .stack{display:grid;gap:10px}
-    video{width:100%;max-height:48vh;border-radius:16px;background:#000}
+    .controls{display:flex;flex-wrap:wrap;gap:8px}
+    button, .btn{appearance:none;border:1px solid #334155;background:#0b1220;color:#e5e7eb;padding:10px 14px;border-radius:12px;cursor:pointer}
+    button:hover{border-color:#475569}
+    input[type=text]{width:100%;padding:12px 14px;border:1px solid #334155;border-radius:12px;background:#0b1220;color:#e5e7eb;font-size:16px}
     .status{font-size:13px;color:var(--muted)}
+    #preview{width:100%;border-radius:16px;background:#000;max-height:50vh;object-fit:contain}
+    #qrcode{display:grid;place-items:center;background:#0b1220;border:1px dashed #334155;border-radius:16px;min-height:260px}
     .pill{display:inline-flex;gap:6px;align-items:center;padding:6px 10px;border:1px solid #334155;border-radius:999px;font-size:12px;cursor:pointer}
     .pill:hover{border-color:#64748b}
-    #qrcode{display:grid;place-items:center;background:#0b1220;border:1px dashed #334155;border-radius:16px;min-height:260px}
-    .grid{display:grid;grid-template-columns:1fr;gap:12px}
-    @media (min-width:980px){.grid{grid-template-columns:1.2fr .8fr}}
     .muted{color:var(--muted)}
     .small{font-size:12px}
-    .install{position:fixed;right:14px;bottom:14px}
-    pre{white-space:pre-wrap;background:#0b1220;border:1px dashed #334155;border-radius:14px;padding:10px;max-height:200px;overflow:auto}
-    .kv{display:grid;grid-template-columns:160px 1fr; gap:6px; font-size:12px; color:#cbd5e1}
   </style>
 </head>
 <body>
   <header>
     <h1>OCR → QR para folios</h1>
-    <div class="sub">v3 con diagnóstico. Si se ve negro, usa “Estado cámara” y “Pedir permiso”.</div>
-  </header>
-
-  <main>
-    <section class="grid">
-      <div class="card stack">
-        <div class="controls">
-          <button id="startCam" class="primary">🎥 Iniciar cámara</button>
-          <button id="scanOnce">🔍 Escanear 1 vez</button>
-          <button id="toggleAuto" class="warn">⚡ Auto (apagado)</button>
-          <button id="switchCam">🔄 Cambiar cámara</button>
-          <label class="btn" for="fileInput">📷 Subir foto</label>
-          <input id="fileInput" type="file" accept="image/*" capture="environment" hidden>
-        </div>
-        <video id="video" playsinline muted></video>
-        <canvas id="frame" hidden></canvas>
-        <div class="status" id="status">Cargando OCR… primera vez puede tardar 10–20s.</div>
-        <div class="row">
-          <label class="small muted">Folio detectado (puedes corregirlo antes de generar el QR)</label>
-          <input id="folio" type="text" placeholder="Ej. FQ656CVFB4LD4Y88" />
-          <div class="controls">
-            <button id="makeQR" class="good">✅ Generar QR</button>
-            <button id="copyFolio">📋 Copiar folio</button>
-            <button id="clear">♻️ Limpiar</button>
-          </div>
-        </div>
-        <div class="row">
-          <div class="small muted">Sugerencias detectadas:</div>
-          <div id="candidates" class="controls"></div>
-        </div>
+    <div class=\"sub\">Plan B: sin permisos de cámara. Toma/elige una <strong>foto</strong> del cupón, detecta el folio y genera el QR. <em>Forzando longitud 16 con correcciones O↔0, I↔1, B↔8.</em></div>
+  </header>  <main>
+    <section class="card stack">
+      <div class="controls">
+        <label for="fileInput" class="btn">📷 Tomar foto / Elegir imagen</label>
+        <input id="fileInput" type="file" accept="image/*" capture="environment" hidden>
+        <button id="rephoto">🔁 Tomar otra</button>
+        <button id="tryAgain">🔍 Analizar de nuevo</button>
       </div>
+      <img id="preview" alt="Vista previa" />
+      <canvas id="work" hidden></canvas>
+      <div id="status" class="status">Listo. Sube una foto nítida y bien iluminada del folio.</div><div class="stack">
+    <label class="small muted">Folio detectado (puedes corregirlo):</label>
+    <input id="folio" type="text" placeholder="Ej. FQ656CVFB4LD4Y88" />
+    <div class="controls">
+      <button id="makeQR">✅ Generar QR</button>
+      <button id="copyFolio">📋 Copiar folio</button>
+      <button id="clear">♻️ Limpiar</button>
+    </div>
+    <div class="small muted">Sugerencias detectadas:</div>
+    <div id="candidates" class="controls"></div>
+  </div>
+</section>
 
-      <div class="card stack">
-        <div class="small muted">Código QR</div>
-        <div id="qrcode"></div>
+<section class="card stack">
+  <div class="small muted">Código QR</div>
+  <div id="qrcode"></div>
+  <div class="small muted">Consejos: evita sombras, acerca el cupón y mantén la foto paralela al papel. Si falla, intenta otra toma.</div>
+</section>
 
-        <div class="small muted">Diagnóstico de cámara</div>
-        <div class="controls">
-          <button id="checkPerms">🛠️ Estado cámara</button>
-          <button id="askPerms">🔔 Pedir permiso</button>
-          <button id="stopCam">⏹️ Apagar cámara</button>
-        </div>
-        <div class="kv">
-          <div>Permiso (browser):</div><div id="permState">—</div>
-          <div>Dispositivos:</div><div id="devices">—</div>
-          <div>Usando cámara:</div><div id="usingCam">—</div>
-          <div>Resolución:</div><div id="resolution">—</div>
-          <div>Último error:</div><div id="lastErr">—</div>
-        </div>
-        <pre id="log"></pre>
-      </div>
-    </section>
-  </main>
-
-  <button id="installBtn" class="install btn">⬇️ Instalar</button>
-
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
-    }
-    let deferredPrompt;
-    const installBtn = document.getElementById('installBtn');
-    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; installBtn.style.display = 'block'; });
-    installBtn.addEventListener('click', async () => { if (!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; installBtn.style.display = 'none'; });
-
-    const video = document.getElementById('video');
-    const frame = document.getElementById('frame');
+  </main>  <!-- Librerías -->  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>  <script>
+    const fileInput = document.getElementById('fileInput');
+    const preview = document.getElementById('preview');
+    const work = document.getElementById('work');
     const statusEl = document.getElementById('status');
     const folioInput = document.getElementById('folio');
     const candidatesEl = document.getElementById('candidates');
     const qrcodeEl = document.getElementById('qrcode');
-    const permState = document.getElementById('permState');
-    const devicesDiv = document.getElementById('devices');
-    const usingCam = document.getElementById('usingCam');
-    const resolution = document.getElementById('resolution');
-    const lastErr = document.getElementById('lastErr');
-    const logEl = document.getElementById('log');
 
     let worker = null;
-    let stream = null;
-    let autoTimer = null;
-    let deviceList = [];
-    let currentDeviceIndex = -1;
-
-    function log(msg){ logEl.textContent = `${new Date().toLocaleTimeString()} • ${msg}
-` + logEl.textContent; }
-    function setStatus(msg){ statusEl.textContent = msg; log(msg); }
+    function setStatus(msg){ statusEl.textContent = msg; }
 
     async function initOCR(){
-      if (worker) return;
+      if(worker) return;
       setStatus('Cargando OCR…');
       worker = await Tesseract.createWorker({ logger: m => {
         if(m.status && m.progress!=null){ setStatus(`${m.status} ${(m.progress*100).toFixed(0)}%`); }
@@ -138,177 +79,106 @@
       await worker.loadLanguage('eng');
       await worker.initialize('eng');
       await worker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
-      setStatus('OCR listo. Pulsa “Iniciar cámara”.');
+      setStatus('OCR listo. Sube una foto.');
     }
 
-    async function checkPermissions(){
-      try{
-        const s = await navigator.permissions.query({ name: 'camera' });
-        permState.textContent = s.state; log('Permiso cámara: ' + s.state);
-      }catch(e){
-        permState.textContent = 'no soportado'; log('Permissions API no soportada');
+    function preprocess(ctx, w, h){
+      const img = ctx.getImageData(0,0,w,h);
+      const d = img.data;
+      // Escala a grises + contraste suave
+      const contrast = 1.35, brightness = -10; // ajustables
+      for(let i=0;i<d.length;i+=4){
+        const r=d[i], g=d[i+1], b=d[i+2];
+        let y = 0.299*r + 0.587*g + 0.114*b; // gris
+        y = (y-128)*contrast + 128 + brightness; // contraste/ brillo
+        y = Math.max(0, Math.min(255, y));
+        d[i]=d[i+1]=d[i+2]=y;
       }
-      await listCameras();
+      ctx.putImageData(img,0,0);
     }
 
-    async function listCameras(){
-      try{
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        deviceList = devices.filter(d => d.kind === 'videoinput');
-        devicesDiv.textContent = deviceList.map((d,i)=>`[${i}] ${d.label || '(sin nombre)'}`).join(' | ') || 'ninguna';
-      }catch(e){
-        devicesDiv.textContent = 'error enumerando'; log('enumerateDevices error: ' + e.message);
+    function pickCodes(text){
+      // Genera variantes para corregir confusiones comunes O↔0, I↔1, B↔8
+      function genVariants(s){
+        const pairs = [['O','0'],['0','O'],['I','1'],['1','I'],['B','8'],['8','B']];
+        const out = new Set();
+        for(const [a,b] of pairs){ if(s.includes(a)) out.add(s.split(a).join(b)); }
+        return [...out];
       }
-    }
-
-    async function askPermissions(){
-      try{
-        const tmp = await navigator.mediaDevices.getUserMedia({ video: true });
-        tmp.getTracks().forEach(t=>t.stop());
-        log('Permiso concedido via prompt.');
-      }catch(e){
-        lastErr.textContent = e.name + ': ' + e.message;
-        log('Error al pedir permiso: ' + e.name + ' - ' + e.message);
+      const up = (text||'').toUpperCase().replace(/[^A-Z0-9]/g,' ');
+      const tokens = up.split(' ').filter(Boolean);
+      const exact16 = tokens.filter(t=>t.length===16);
+      const flex = tokens.filter(t=>t.length>=12 && t.length<=20);
+      const pool = exact16.length ? exact16 : flex;
+      const merged = []; const seen = new Set();
+      for(const code of pool){
+        if(!seen.has(code)){ merged.push(code); seen.add(code); }
+        for(const v of genVariants(code)) if(!seen.has(v)){ merged.push(v); seen.add(v); }
       }
-      await checkPermissions();
-    }
-
-    async function startCamera(deviceId){
-      try{
-        await initOCR();
-        if (stream) { stream.getTracks().forEach(t=>t.stop()); stream = null; }
-        let constraints;
-        if (deviceId) {
-          constraints = { video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } } };
-        } else {
-          constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } };
-        }
-        log('Solicitando getUserMedia ' + JSON.stringify(constraints));
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch(err1){
-        log('Error gUM primario: ' + err1.name + ' - ' + err1.message);
-        try{
-          stream = await navigator.mediaDevices.getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' } });
-        }catch(err2){
-          log('Error gUM fallback1: ' + err2.name + ' - ' + err2.message);
-          try{
-            stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          }catch(err3){
-            log('Error gUM fallback2: ' + err3.name + ' - ' + err3.message);
-            lastErr.textContent = err3.name + ': ' + err3.message;
-            setStatus('No se pudo acceder a la cámara. Revisa permisos del sitio/app y vuelve a intentar.');
-            return;
-          }
-        }
-      }
-      video.srcObject = stream; await video.play();
-      usingCam.textContent = (stream.getVideoTracks()[0]?.label) || '(sin etiqueta)';
-      resolution.textContent = video.videoWidth + '×' + video.videoHeight;
-      setStatus('Cámara encendida.');
-      await listCameras();
-      if (currentDeviceIndex === -1 && deviceList.length) {
-        const back = deviceList.findIndex(d => /back|environment/i.test(d.label));
-        currentDeviceIndex = back >= 0 ? back : 0;
-      }
-    }
-
-    async function switchCamera(){
-      if (!deviceList.length) await listCameras();
-      if (!deviceList.length) { setStatus('No hay múltiples cámaras o faltan permisos.'); return; }
-      currentDeviceIndex = (currentDeviceIndex + 1) % deviceList.length;
-      const id = deviceList[currentDeviceIndex].deviceId;
-      await startCamera(id);
-      setStatus('Cambiando cámara…');
-    }
-
-    function stopCamera(){
-      if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; usingCam.textContent='—'; resolution.textContent='—'; setStatus('Cámara apagada.'); }
-    }
-
-    async function grabFrame(){
-      if(!worker) await initOCR();
-      if(video.readyState < 2){ setStatus('La cámara no está lista.'); return; }
-      const w = video.videoWidth, h = video.videoHeight;
-      frame.width = w; frame.height = h;
-      const ctx = frame.getContext('2d');
-      ctx.drawImage(video, 0, 0, w, h);
-      const { data } = await worker.recognize(frame);
-      const out = pickBestCode(data.text || '');
-      renderCandidates(out.all);
-      if(out.best){
-        folioInput.value = out.best; renderQR(out.best); beep(); setStatus('Folio detectado.');
-      }else setStatus('No se detectó un folio claro. Intenta de nuevo.');
-    }
-
-    function pickBestCode(text){
-      const up = text.toUpperCase().replace(/[^A-Z0-9\s]/g, ' ');
-      const matches = up.match(/\b[A-Z0-9]{12,20}\b/g) || [];
-      const uniq = [...new Set(matches)];
+      merged.sort((a,b)=>Math.abs(16-a.length)-Math.abs(16-b.length));
+      return {best: merged[0] || null, all: merged.slice(0,10)};
+    }\b/g)||[];
+      const uniq = [...new Set(m)];
       uniq.sort((a,b)=>Math.abs(16-a.length)-Math.abs(16-b.length));
-      return { best: uniq[0] || null, all: uniq.slice(0,6) };
+      return {best: uniq[0]||null, all: uniq.slice(0,8)};
     }
 
     function renderCandidates(list){
-      candidatesEl.innerHTML = '';
+      candidatesEl.innerHTML='';
       list.forEach(code=>{
-        const btn = document.createElement('div');
-        btn.className = 'pill'; btn.textContent = code;
-        btn.addEventListener('click',()=>{ folioInput.value = code; renderQR(code); });
-        candidatesEl.appendChild(btn);
+        const pill=document.createElement('div'); pill.className='pill'; pill.textContent=code;
+        pill.onclick=()=>{ folioInput.value=code; makeQR(); };
+        candidatesEl.appendChild(pill);
       });
     }
 
-    function renderQR(text){
-      if(!text) return;
-      qrcodeEl.innerHTML='';
-      new QRCode(qrcodeEl, { text, width: 300, height: 300, correctLevel: QRCode.CorrectLevel.M });
+    async function analyze(img){
+      await initOCR();
+      const w = Math.min(1600, img.naturalWidth);
+      const scale = w / img.naturalWidth;
+      const h = Math.round(img.naturalHeight * scale);
+      work.width = w; work.height = h;
+      const ctx = work.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+
+      // Dos pasadas: normal y con preproceso
+      const out1 = await worker.recognize(work);
+      preprocess(ctx, w, h);
+      const out2 = await worker.recognize(work);
+
+      const a = pickCodes(out1.data.text), b = pickCodes(out2.data.text);
+      const merged = [...new Set([...(a.all||[]), ...(b.all||[])])];
+      merged.sort((x,y)=>Math.abs(16-x.length)-Math.abs(16-y.length));
+      renderCandidates(merged);
+      if(merged[0]){ folioInput.value = merged[0]; makeQR(); setStatus('Folio detectado.'); }
+      else setStatus('No se detectó un folio claro. Intenta otra foto.');
     }
 
-    function beep(){ try{ const ctx = new (window.AudioContext||window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18); setTimeout(()=>{o.stop(); ctx.close();}, 200);}catch(e){} }
-
-    document.getElementById('startCam').addEventListener('click', ()=>startCamera());
-    document.getElementById('switchCam').addEventListener('click', switchCamera);
-    document.getElementById('stopCam').addEventListener('click', stopCamera);
-    document.getElementById('scanOnce').addEventListener('click', grabFrame);
-    document.getElementById('toggleAuto').addEventListener('click', (e)=>{
-      if(autoTimer){ clearInterval(autoTimer); autoTimer = null; e.target.textContent = '⚡ Auto (apagado)'; e.target.classList.add('warn'); }
-      else{ autoTimer = setInterval(grabFrame, 1600); e.target.textContent = '⚡ Auto (encendido)'; e.target.classList.remove('warn'); setStatus('Autoescaneo activo…'); }
-    });
-
-    document.getElementById('makeQR').addEventListener('click', ()=>{
-      const text = (folioInput.value||'').trim().toUpperCase();
-      if(!text){ setStatus('Escribe o detecta un folio primero.'); return; }
-      renderQR(text); setStatus('QR generado.');
-    });
-    document.getElementById('copyFolio').addEventListener('click', async ()=>{
-      const text = (folioInput.value||'').trim(); if(!text) return;
-      try{ await navigator.clipboard.writeText(text); setStatus('Folio copiado al portapapeles.'); } catch(e){ setStatus('No se pudo copiar.'); }
-    });
-    document.getElementById('clear').addEventListener('click', ()=>{
-      folioInput.value=''; candidatesEl.innerHTML=''; qrcodeEl.innerHTML=''; setStatus('Listo para el siguiente folio.');
-    });
-
-    document.getElementById('checkPerms').addEventListener('click', checkPermissions);
-    document.getElementById('askPerms').addEventListener('click', askPermissions);
-
-    document.getElementById('fileInput').addEventListener('change', async (ev)=>{
-      const file = ev.target.files[0]; if(!file) return;
-      await initOCR();
+    fileInput.addEventListener('change', ()=>{
+      const file = fileInput.files[0]; if(!file) return;
       const img = new Image();
-      img.onload = async ()=>{
-        frame.width = img.naturalWidth; frame.height = img.naturalHeight;
-        const ctx = frame.getContext('2d'); ctx.drawImage(img, 0, 0);
-        const { data } = await worker.recognize(frame);
-        const out = pickBestCode(data.text || '');
-        renderCandidates(out.all);
-        if(out.best){ folioInput.value = out.best; renderQR(out.best); beep(); setStatus('Folio detectado desde imagen.'); }
-        else setStatus('No se detectó un folio claro en la foto.');
-      };
+      img.onload = ()=>{ preview.src = img.src; analyze(img); };
       img.src = URL.createObjectURL(file);
     });
 
-    window.addEventListener('beforeunload', ()=>{ try{ if(stream){ stream.getTracks().forEach(t=>t.stop()); } if(worker){ worker.terminate(); } }catch(e){} });
-    initOCR();
-  </script>
-</body>
+    document.getElementById('rephoto').onclick = ()=> fileInput.click();
+    document.getElementById('tryAgain').onclick = ()=>{ if(preview.src) { const img=new Image(); img.onload=()=>analyze(img); img.src=preview.src; } };
+
+    function makeQR(){
+      const t=(folioInput.value||'').trim().toUpperCase();
+      if(!t) return;
+      if(t.length!==16){ setStatus('Aviso: el folio no tiene 16 caracteres. Revisa O/0, I/1, B/8.'); }
+      qrcodeEl.innerHTML='';
+      new QRCode(qrcodeEl,{ text:t, width:300, height:300, correctLevel:QRCode.CorrectLevel.M });
+    });
+    }
+    document.getElementById('makeQR').onclick = makeQR;
+    document.getElementById('copyFolio').onclick = async ()=>{
+      try{ await navigator.clipboard.writeText((folioInput.value||'').trim()); setStatus('Folio copiado.'); }catch(e){ setStatus('No se pudo copiar.'); }
+    };
+    document.getElementById('clear').onclick = ()=>{ folioInput.value=''; qrcodeEl.innerHTML=''; candidatesEl.innerHTML=''; setStatus('Listo. Sube otra foto.'); };
+
+    // inicio
+    setStatus('Listo. Sube una foto nítida y bien iluminada del folio.');
+  </script></body>
 </html>
